@@ -1,0 +1,25 @@
+node_modules/
+dist/
+build/
+types/
+*.log
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.idea/
+.vscode/
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+yarn-error.log
+npm-debug.log*
+ coverage/
+ .nyc_output/
+ .tscache/
+ *.tsbuildinfo
+ .parcel-cache/
+ .next/
+ out/
+ *.iml
