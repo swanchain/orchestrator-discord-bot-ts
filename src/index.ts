@@ -2,9 +2,11 @@ import express from 'express';
 import { interactionsHandler } from './interactionsHandler';
 import {getEnvVar, InstallGlobalCommands, VerifyDiscordRequest} from "./utils/utils";
 import {ALL_COMMANDS} from "./commands";
+import "reflect-metadata";
+import { AppDataSource } from '../data-source'; 
+import { UserService } from './commandHandler/handleFaucetCommand'
 
 const app = express();
-
 
 const PORT = process.env.PORT || 3000;
 const publicKey = getEnvVar('PUBLIC_KEY')
