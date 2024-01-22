@@ -2,7 +2,6 @@ import { Client, Message, Guild } from 'discord.js';
 import { UserService } from '../commandHandler/handleFaucetCommand'; 
 import { getConfig } from '../model/config';
 import { infoLogger, errorLogger } from '../log/logger';
-import { Web3 } from 'web3';
 import { isAddress } from 'web3-validator'
 import { Semaphore } from 'async-mutex';
 
