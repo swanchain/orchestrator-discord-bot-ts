@@ -2,7 +2,22 @@ import Web3 from 'web3';
 import { getConfig } from '../model/config';
 import { errorLogger } from '../log/logger';
 import { setUserClaimInfo } from '../model/user';
+import { isAddress } from 'web3-validator'
+import winston from 'winston';
 
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.json(),
+  transports: [
+    new winston.transports.File({ filename: 'combined.log' })
+  ]
+});
+
+function toHexString(byteArray: Uint8Array) {
+  return Array.from(byteArray, function(byte) {
+      return ('0' + (byte & 0xFF).toString(16)).slice(-2);
+  }).join('');
+}
 
 class UserService {
     private commonAbi = [
@@ -50,7 +65,7 @@ class UserService {
         }
     ];
 
-    async transfer(network: string, tokenName: string, fromWalletAddress: string, toWalletAddress: string, claimedAmount: number, isTest = false): Promise<void> {
+    async transfer(network: string, tokenName: string, fromWalletAddress: string, toWalletAddress: string, claimedAmount: number, isTest = false): Promise<string> {
       const rpcEndpointKey = `${network}_${isTest ? "TEST_" : ""}RPC_ENDPOINT`;
       const rpcEndpoint = await getConfig(rpcEndpointKey) || '';
 
@@ -58,63 +73,66 @@ class UserService {
 
       const contractKey = `${network}_${isTest ? "TEST_" : ""}CONTRACT_ADDRESS`;
       const contractAddress = await getConfig(contractKey);
-      if (contractAddress === null) {
-        errorLogger.error(`Contract address is null.`);
-        return;
+      const contract = contractAddress ? new web3.eth.Contract(this.commonAbi, contractAddress) : null;
+      if (contract == null) {
+        errorLogger.error('Contract is null.')
+        return '';
       }
-      const contract = new web3.eth.Contract(this.commonAbi, contractAddress);
-
-      if (!web3.utils.isAddress(toWalletAddress) || !web3.utils.isAddress(fromWalletAddress)) {
+      if (!isAddress(toWalletAddress) || !isAddress(fromWalletAddress)) {
         errorLogger.error(`Invalid wallet address. From: ${fromWalletAddress}, To: ${toWalletAddress}`);
-        return;
+        return '';
       }
 
       // check if the wallet has enough balance
       const balance = await contract.methods.balanceOf(fromWalletAddress).call() as number;
       if (balance < claimedAmount) {
         errorLogger.error(`Insufficient balance. Balance: ${balance}, Claimed amount: ${claimedAmount}`);
-        return;
+        return '';
       }
 
       // check if the wallet has enough gas
-        const gasPrice = await web3.eth.getGasPrice();
-        const gasEstimate = await contract.methods.transfer(toWalletAddress, claimedAmount).estimateGas({
-          from: fromWalletAddress,
-          gasPrice: gasPrice.toString(),
-        });
-        let gasLimit = Math.floor(Number(gasEstimate) * 1.5);
-        const gasCost = gasEstimate * BigInt(gasPrice);
-        const walletBalance = await web3.eth.getBalance(fromWalletAddress);
-        if (gasCost > walletBalance) {
-          errorLogger.error(`Insufficient gas. Gas cost: ${gasCost}, Wallet balance: ${walletBalance}`);
-          return;
-        }
+      const gasPrice = await web3.eth.getGasPrice();
+      const gasEstimate = await contract.methods.transfer(toWalletAddress, claimedAmount).estimateGas({
+        from: fromWalletAddress,
+        gasPrice: gasPrice.toString(),
+      });
+      const gasCost = gasEstimate * BigInt(gasPrice);
+      const walletBalance = await web3.eth.getBalance(fromWalletAddress);
+      if (gasCost > walletBalance) {
+        errorLogger.error(`Insufficient gas. Gas cost: ${gasCost}, Wallet balance: ${walletBalance}`);
+        return '';
+      }
       const privateKey = await getConfig('PRIVATE_KEY');
       if (privateKey === null) {
         errorLogger.error(`Private key is null.`);
-        return;
+        return '';
       }
       const account = web3.eth.accounts.privateKeyToAccount(privateKey);
       const nonce = await web3.eth.getTransactionCount(account.address);
 
-        try {
-          const tx = contract.methods.transfer(toWalletAddress, claimedAmount).encodeABI();
-          const transaction = {
-            'from': fromWalletAddress,
-            'to': contractAddress,
-            'gas': gasEstimate,
-            'gasPrice': gasPrice,
-            'nonce': nonce,
-            'data': tx
-          };
-          const signedTx = await web3.eth.accounts.signTransaction(transaction, privateKey);
-          const txHash = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
-          const txnReceipt = await web3.eth.getTransactionReceipt(txHash.toString());
-          return txHash.toString() as string;
+      try {
+        const tx = contract.methods.transfer(toWalletAddress, claimedAmount).encodeABI();
+        const transaction = {
+          'from': fromWalletAddress,
+          'to': contractAddress,
+          'gas': gasEstimate,
+          'gasPrice': gasPrice,
+          'nonce': nonce,
+          'data': tx
+        };
+        const signedTx = await web3.eth.accounts.signTransaction(transaction, privateKey);
+        const txHash = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+        const txnReceipt = await web3.eth.getTransactionReceipt(txHash.toString());
+
+        logger.info(`-- Transaction successful with transaction hash: ${txHash.transactionHash.toString()} at ${new Date().toISOString()}`);
+        logger.info(`-- Transaction receipt: ${txnReceipt}`);
+        logger.info(`-- Gas used: ${txnReceipt["gasUsed"]} for transaction hash: ${txHash.transactionHash.toString()} at ${new Date().toISOString()}`);
+        return txHash.transactionHash.toString();
         } catch (e) {
           errorLogger.error(`Failed to transfer to ${toWalletAddress}, error: ${e}`);
-          return null;
+          return '';
       }
+    
   }
 
   async recordUserTransaction(discordId: string, discordName: string, fromWalletAddress: string, toWalletAddress: string, claimedAmount: number, txHash: string, tokenSymbol: string): Promise<boolean> {
