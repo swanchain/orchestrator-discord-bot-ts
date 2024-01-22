@@ -1,7 +1,6 @@
 import Web3 from 'web3';
 import { getConfig } from '../model/config';
 import { errorLogger } from '../log/logger';
-import { getRepository } from 'typeorm';
 import { User } from '../model/user';
 import { isAddress } from 'web3-validator'
 import winston from 'winston';
@@ -15,7 +14,7 @@ const logger = winston.createLogger({
   ]
 });
 
-class UserService {
+export class UserService {
   private commonAbi = [
     {
         "inputs": [
@@ -160,8 +159,8 @@ class UserService {
     if (network === 'OPSWAN') {
       claimedAmount = web3.utils.toWei(Number(claimedAmount).toString(), 'mwei');
     } else {
-      claimedAmount = web3.utils.toWei(Number(claimedAmount).toString(), 'ether');
-
+    claimedAmount = web3.utils.toWei(Number(claimedAmount).toString(), 'ether');
+    }
     const txHash = await this.transfer(network, tokenName, fromWalletAddress, toWalletAddress, claimedAmount, isTest);
       if (txHash === null) {
         return null;
@@ -173,7 +172,7 @@ class UserService {
       }
         return txHash;
       }
-  }
+    
 }
 export const handleFaucetCommand = async (address: string, id:string) => {
     // Call when user use /get_swan command
