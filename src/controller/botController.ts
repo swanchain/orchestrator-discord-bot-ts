@@ -1,7 +1,7 @@
 import { Client, Message } from 'discord.js';
 import { UserService } from '../commandHandler/handleFaucetCommand'; 
 
-class BotController {
+export class BotController {
     private client: Client;
     private userService: UserService;
     private semaphore: any; // Replace with the correct type
