@@ -3,6 +3,7 @@ import { getConfig } from '../model/config';
 import { errorLogger } from '../log/logger';
 import { setUserClaimInfo } from '../model/user';
 
+
 class UserService {
     private commonAbi = [
         {
@@ -51,9 +52,11 @@ class UserService {
 
     async transfer(network: string, tokenName: string, fromWalletAddress: string, toWalletAddress: string, claimedAmount: number, isTest = false): Promise<void> {
       const rpcEndpointKey = `${network}_${isTest ? "TEST_" : ""}RPC_ENDPOINT`;
-      const web3 = new Web3(await getConfig(rpcEndpointKey));
+      const rpcEndpoint = await getConfig(rpcEndpointKey) || '';
 
-      const contractKey = `${tokenName}_${isTest ? "TEST_" : ""}CONTRACT_ADDRESS`;
+      const web3 = new Web3(rpcEndpoint);
+
+      const contractKey = `${network}_${isTest ? "TEST_" : ""}CONTRACT_ADDRESS`;
       const contractAddress = await getConfig(contractKey);
       if (contractAddress === null) {
         errorLogger.error(`Contract address is null.`);
