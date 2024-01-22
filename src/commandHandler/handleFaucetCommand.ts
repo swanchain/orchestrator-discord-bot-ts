@@ -16,52 +16,53 @@ const logger = winston.createLogger({
 });
 
 class UserService {
-    private commonAbi = [
-        {
-            "constant": false,
-            "inputs": [
-                {
-                    "name": "_to",
-                    "type": "address"
-                },
-                {
-                    "name": "_value",
-                    "type": "uint256"
-                }
-            ],
-            "name": "transfer",
-            "outputs": [
-                {
-                    "name": "",
-                    "type": "bool"
-                }
-            ],
-            "payable": false,
-            "stateMutability": "nonpayable",
-            "type": "function"
-        },
-        {
-            "constant": true,
-            "inputs": [
-                {
-                    "name": "_owner",
-                    "type": "address"
-                }
-            ],
-            "name": "balanceOf",
-            "outputs": [
-                {
-                    "name": "balance",
-                    "type": "uint256"
-                }
-            ],
-            "payable": false,
-            "stateMutability": "view",
-            "type": "function"
-        }
-    ];
+  private commonAbi = [
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "to",
+                "type": "address"
+            },
+            {
+                "internalType": "uint256",
+                "name": "amount",
+                "type": "uint256"
+            }
+        ],
+        "name": "transfer",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "account",
+                "type": "address"
+            }
+        ],
+        "name": "balanceOf",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    }
+];
 
-    async transfer(network: string, tokenName: string, fromWalletAddress: string, toWalletAddress: string, claimedAmount: number, isTest = false): Promise<string> {
+    async transfer(network: string, tokenName: string, fromWalletAddress: string, toWalletAddress: string, claimedAmount: string, isTest = false): Promise<string> {
       const rpcEndpointKey = `${network}_${isTest ? "TEST_" : ""}RPC_ENDPOINT`;
       const rpcEndpoint = await getConfig(rpcEndpointKey) || '';
 
@@ -81,7 +82,7 @@ class UserService {
 
       // check if the wallet has enough balance
       const balance = await contract.methods.balanceOf(fromWalletAddress).call() as number;
-      if (balance < claimedAmount) {
+      if (balance < parseInt(claimedAmount)) {
         errorLogger.error(`Insufficient balance. Balance: ${balance}, Claimed amount: ${claimedAmount}`);
         return '';
       }
@@ -120,10 +121,10 @@ class UserService {
         const txHash = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
         const txnReceipt = await web3.eth.getTransactionReceipt(txHash.toString());
 
-        logger.info(`-- Transaction successful with transaction hash: ${txHash.transactionHash.toString()} at ${new Date().toISOString()}`);
+        logger.info(`-- Transaction successful with transaction hash: ${web3.utils.bytesToHex(txHash.transactionHash)} at ${new Date().toISOString()}`);
         logger.info(`-- Transaction receipt: ${txnReceipt}`);
-        logger.info(`-- Gas used: ${txnReceipt["gasUsed"]} for transaction hash: ${txHash.transactionHash.toString()} at ${new Date().toISOString()}`);
-        return txHash.transactionHash.toString();
+        logger.info(`-- Gas used: ${txnReceipt["gasUsed"]} for transaction hash: ${web3.utils.bytesToHex(txHash.transactionHash)} at ${new Date().toISOString()}`);
+        return web3.utils.bytesToHex(txHash.transactionHash);
         } catch (e) {
           errorLogger.error(`Failed to transfer to ${toWalletAddress}, error: ${e}`);
           return '';
@@ -131,7 +132,7 @@ class UserService {
     
   }
 
-  async recordUserTransaction(discordId: string, discordName: string, fromWalletAddress: string, toWalletAddress: string, claimedAmount: number, txHash: string, tokenSymbol: string): Promise<boolean> {
+  async recordUserTransaction(discordId: string, discordName: string, fromWalletAddress: string, toWalletAddress: string, claimedAmount: string, txHash: string, tokenSymbol: string): Promise<boolean> {
     logger.info(`-- Recording user transaction for ${discordName} at ${new Date().toISOString()}`);
     const userRepository = AppDataSource.getRepository(User);
     const user = new User();
@@ -139,7 +140,7 @@ class UserService {
     user.discord_name = discordName;
     user.from_wallet_address = fromWalletAddress;
     user.to_wallet_address = toWalletAddress;
-    user.claimed_amount = claimedAmount;
+    user.claimed_amount = parseInt(claimedAmount);
     user.transaction_hash = txHash;
     user.token_symbol = tokenSymbol;
     try {
@@ -151,22 +152,25 @@ class UserService {
       }
   }
 
-  async transferAndRecord(discordId: string, discordName: string, network: string, tokenName: string, fromWalletAddress: string, toWalletAddress: string, claimedAmount: number, tokenSymbol: string, isTest = false): Promise<string | null> {
-    const web3 = new Web3(await getConfig(`${network}_${isTest ? "TEST_" : ""}RPC_ENDPOINT`));
-    if (tokenName === 'OPSWAN' || tokenName === 'POLYGON_USDC') {
+  async transferAndRecord(discordId: string, discordName: string, network: string, tokenName: string, fromWalletAddress: string, toWalletAddress: string, claimedAmount: string, tokenSymbol: string, isTest = false): Promise<string | null> {
+    const rpcEndpointKey = `${network}_${isTest ? "TEST_" : ""}RPC_ENDPOINT`;
+    const rpcEndpoint = await getConfig(rpcEndpointKey) || '';
+
+    const web3 = new Web3(rpcEndpoint);
+    if (network === 'OPSWAN') {
       claimedAmount = web3.utils.toWei(Number(claimedAmount).toString(), 'mwei');
-        } else {
-          claimedAmount = web3.utils.toWei(Number(claimedAmount).toString(), 'ether');
+    } else {
+      claimedAmount = web3.utils.toWei(Number(claimedAmount).toString(), 'ether');
 
-        const txHash = await this.transfer(network, tokenName, fromWalletAddress, toWalletAddress, claimedAmount, isTest);
-        if (txHash === null) {
-          return null;
-        }
+    const txHash = await this.transfer(network, tokenName, fromWalletAddress, toWalletAddress, claimedAmount, isTest);
+      if (txHash === null) {
+        return null;
+      }
 
-        const isSuccess = await this.recordUserTransaction(discordId, discordName, fromWalletAddress, toWalletAddress, claimedAmount, txHash, tokenSymbol);
-        if (!isSuccess) {
-          return null;
-        }
+      const isSuccess = await this.recordUserTransaction(discordId, discordName, fromWalletAddress, toWalletAddress, claimedAmount, txHash, tokenSymbol);
+      if (!isSuccess) {
+        return null;
+      }
         return txHash;
       }
   }
