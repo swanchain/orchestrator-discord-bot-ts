@@ -13,7 +13,7 @@ const logger = winston.createLogger({
 })
 
 export class UserService {
-    private readonly commonAbi: any[];
+    private commonAbi: any[];
 
     constructor() {
         this.commonAbi = [
